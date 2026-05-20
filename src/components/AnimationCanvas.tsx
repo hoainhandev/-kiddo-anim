@@ -30,6 +30,8 @@ export interface AnimationCanvasHandle {
 
 interface AnimationCanvasProps {
   config: AnimationConfig;
+  spriteBase64?: string | null;
+  spriteMime?: string;
   onReady?: () => void;
 }
 
@@ -51,9 +53,15 @@ function canvasToBlob(
 }
 
 const AnimationCanvas = forwardRef<AnimationCanvasHandle, AnimationCanvasProps>(
-  function AnimationCanvas({ config, onReady }, ref) {
+  function AnimationCanvas(
+    { config, spriteBase64, spriteMime = "image/png", onReady },
+    ref,
+  ) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const stateRef = useRef<RenderState>(initRenderState(config));
+    const spriteImgRef = useRef<HTMLImageElement | null>(null);
+    const spriteLoadNonceRef = useRef(0);
+    const currentTRef = useRef(0);
     const playingRef = useRef(true);
     const startRef = useRef(0);
     const pausedAtRef = useRef(0);
@@ -69,19 +77,51 @@ const AnimationCanvas = forwardRef<AnimationCanvasHandle, AnimationCanvasProps>(
     const resetState = useCallback(() => {
       stateRef.current = initRenderState(config);
       pausedAtRef.current = 0;
+      currentTRef.current = 0;
       startRef.current = performance.now();
     }, [config]);
 
     const drawAtTime = useCallback(
-      (t: number, state: RenderState) => {
+      (tMs: number, state: RenderState) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
-        renderFrame(t, ctx, W, H, config, state);
+        currentTRef.current = tMs;
+        renderFrame(tMs, ctx, W, H, config, state, spriteImgRef.current);
       },
       [config],
     );
+
+    const redrawCurrentFrame = useCallback(() => {
+      drawAtTime(currentTRef.current, stateRef.current);
+    }, [drawAtTime]);
+
+    useEffect(() => {
+      if (!spriteBase64) {
+        spriteImgRef.current = null;
+        redrawCurrentFrame();
+        return;
+      }
+
+      const nonce = ++spriteLoadNonceRef.current;
+      const img = new Image();
+      img.onload = () => {
+        if (nonce !== spriteLoadNonceRef.current) return;
+        spriteImgRef.current = img;
+
+        if (pausedAtRef.current >= dur) {
+          resetState();
+          playingRef.current = true;
+          setPlaying(true);
+          setProgress(0);
+        } else {
+          redrawCurrentFrame();
+        }
+      };
+      img.onerror = (e) => console.error("Sprite load error:", e);
+      img.src = `data:${spriteMime};base64,${spriteBase64}`;
+    }, [spriteBase64, spriteMime, redrawCurrentFrame, dur, resetState]);
 
     useImperativeHandle(
       ref,
@@ -111,8 +151,8 @@ const AnimationCanvas = forwardRef<AnimationCanvasHandle, AnimationCanvasProps>(
           const blobs: Blob[] = [];
 
           for (let i = 0; i < totalFrames; i++) {
-            const t = i * FRAME_MS;
-            drawAtTime(t, state);
+            const tMs = i * FRAME_MS;
+            drawAtTime(tMs, state);
             blobs.push(await canvasToBlob(canvas));
             onProgress?.((i + 1) / totalFrames);
           }
@@ -143,32 +183,25 @@ const AnimationCanvas = forwardRef<AnimationCanvasHandle, AnimationCanvasProps>(
     }, [playing]);
 
     useEffect(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
       let rafId = 0;
 
       const loop = (now: number) => {
-        if (!exportingRef.current) {
-          if (playingRef.current) {
-            const elapsed = now - startRef.current;
-            const t = Math.min(elapsed, dur);
-            pausedAtRef.current = t;
-            drawAtTime(t, stateRef.current);
-            setProgress(t / dur);
+        if (!exportingRef.current && playingRef.current) {
+          const elapsed = now - startRef.current;
+          const tMs = Math.min(elapsed, dur);
+          pausedAtRef.current = tMs;
+          drawAtTime(tMs, stateRef.current);
+          setProgress(tMs / dur);
 
-            if (t >= dur) {
-              playingRef.current = false;
-              setPlaying(false);
-            }
+          if (tMs >= dur) {
+            playingRef.current = false;
+            setPlaying(false);
           }
+        }
 
-          if (!readyRef.current) {
-            readyRef.current = true;
-            onReady?.();
-          }
+        if (!readyRef.current) {
+          readyRef.current = true;
+          onReady?.();
         }
 
         rafId = requestAnimationFrame(loop);
@@ -184,6 +217,7 @@ const AnimationCanvas = forwardRef<AnimationCanvasHandle, AnimationCanvasProps>(
           performance.now() - startRef.current,
           dur,
         );
+        currentTRef.current = pausedAtRef.current;
         setPlaying(false);
       } else {
         if (pausedAtRef.current >= dur) {

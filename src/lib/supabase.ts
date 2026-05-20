@@ -1,18 +1,34 @@
 import { createClient } from "@supabase/supabase-js";
 import type { AnimationConfig, Video } from "@/types/animation";
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error("Missing Supabase env vars:", {
+    url: !!supabaseUrl,
+    key: !!supabaseKey,
+  });
+}
+
 export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  supabaseUrl || "https://placeholder.supabase.co",
+  supabaseKey || "placeholder-key",
 );
 
 export async function getVideos(): Promise<Video[]> {
+  console.log("getVideos called");
   const { data, error } = await supabase
     .from("videos")
     .select("*")
     .order("created_at", { ascending: false });
 
-  if (error) throw error;
+  console.log("getVideos result:", { data, error });
+
+  if (error) {
+    console.error("Supabase error:", error);
+    throw new Error(error.message);
+  }
   return (data ?? []) as Video[];
 }
 

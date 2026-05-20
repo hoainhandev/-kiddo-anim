@@ -80,15 +80,27 @@ export default function HistoryPage() {
   const [selected, setSelected] = useState<Video | null>(null);
 
   useEffect(() => {
-    getVideos()
-      .then(setVideos)
-      .catch((err) => {
-        console.error(err);
-        setError(
-          err instanceof Error ? err.message : "Không tải được lịch sử",
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        console.log("Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
+        console.log(
+          "Supabase KEY exists:",
+          !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
         );
-      })
-      .finally(() => setLoading(false));
+
+        const data = await getVideos();
+        console.log("Videos loaded:", data);
+        setVideos(data || []);
+      } catch (err: unknown) {
+        console.error("History load error:", err);
+        setError(err instanceof Error ? err.message : "Không tải được lịch sử");
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   }, []);
 
   return (
@@ -101,9 +113,33 @@ export default function HistoryPage() {
       </h1>
 
       {error && (
-        <p className="mb-4 text-center text-sm text-red-600" role="alert">
-          {error}
-        </p>
+        <div
+          style={{
+            textAlign: "center",
+            padding: 40,
+            color: "#cc3030",
+            fontSize: 14,
+          }}
+          role="alert"
+        >
+          ❌ Lỗi: {error}
+          <br />
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: 12,
+              padding: "8px 20px",
+              background: "#F4750A",
+              color: "#fff",
+              border: "none",
+              borderRadius: 20,
+              cursor: "pointer",
+            }}
+          >
+            Thử lại
+          </button>
+        </div>
       )}
 
       {loading && (
