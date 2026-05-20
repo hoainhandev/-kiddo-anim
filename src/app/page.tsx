@@ -8,11 +8,9 @@ import AnimationCanvas, {
 import AnimationOptionsPanel, {
   defaultAnimationOptions,
 } from "@/components/AnimationOptions";
-import ExportButton, {
-  type ExportedVideoData,
-} from "@/components/ExportButton";
+import ExportButton from "@/components/ExportButton";
 import UploadZone from "@/components/UploadZone";
-import type { AnimationConfig, AnimationOptions } from "@/types/animation";
+import type { AnimationConfig, AnimationOptions, Video } from "@/types/animation";
 
 export default function Home() {
   const canvasRef = useRef<AnimationCanvasHandle>(null);
@@ -23,9 +21,7 @@ export default function Home() {
   const [options, setOptions] = useState<AnimationOptions>(defaultAnimationOptions);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [exportSuccess, setExportSuccess] = useState<ExportedVideoData | null>(
-    null,
-  );
+  const [exportSuccess, setExportSuccess] = useState<Video | null>(null);
 
   const displayConfig = useMemo(
     () =>

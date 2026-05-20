@@ -4,19 +4,13 @@ import { useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
 import { FPS } from "@/lib/animationEngine";
-import type { AnimationConfig } from "@/types/animation";
+import type { AnimationConfig, Video } from "@/types/animation";
 import type { AnimationCanvasHandle } from "./AnimationCanvas";
-
-export interface ExportedVideoData {
-  id: string;
-  thumbnail_url: string;
-  mp4_url: string;
-}
 
 interface ExportButtonProps {
   canvasRef: RefObject<AnimationCanvasHandle | null>;
   config: AnimationConfig;
-  onExportComplete: (videoData: ExportedVideoData) => void;
+  onExportComplete?: (videoData: Video) => void;
 }
 
 const loadFFmpeg = async (): Promise<FFmpeg> => {
@@ -121,33 +115,25 @@ export default function ExportButton({
 
       console.log("Step 6: uploading to server...");
       const formData = new FormData();
-      formData.append("title", config.title);
       formData.append("config", JSON.stringify(config));
-      formData.append(
-        "thumbnail",
-        new File([thumbnailBlob], "thumbnail.jpg", { type: "image/jpeg" }),
-      );
-      formData.append(
-        "mp4",
-        new File([mp4Blob], "animation.mp4", { type: "video/mp4" }),
-      );
+      formData.append("title", config.title || "Animation");
+      formData.append("thumbnail", thumbnailBlob, "thumb.jpg");
+      formData.append("mp4", mp4Blob, "video.mp4");
 
       const res = await fetch("/api/save-video", {
         method: "POST",
         body: formData,
       });
 
+      const saved = (await res.json()) as Video & { error?: string };
+
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(body.error ?? `Upload failed (${res.status})`);
+        throw new Error(saved.error ?? `Upload failed (${res.status})`);
       }
 
-      const videoData = (await res.json()) as ExportedVideoData;
       setProgress(1);
-      console.log("Export complete:", videoData);
-      onExportComplete(videoData);
+      console.log("Export complete:", saved);
+      onExportComplete?.(saved);
     } catch (err) {
       console.error("Export failed:", err);
       setError(err instanceof Error ? err.message : "Xuất video thất bại");

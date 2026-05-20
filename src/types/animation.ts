@@ -90,17 +90,9 @@ export interface AnimationConfig {
 export interface Video {
   id: string;
   title: string;
-  subtitle: string;
-  config: AnimationConfig;
-  video_url: string;
+  animation_config: AnimationConfig;
   thumbnail_url: string | null;
+  mp4_url: string | null;
+  duration: number | null;
   created_at: string;
-}
-
-export interface SaveVideoParams {
-  title: string;
-  subtitle: string;
-  config: AnimationConfig;
-  video_url: string;
-  thumbnail_url?: string;
 }

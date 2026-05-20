@@ -39,7 +39,9 @@ function VideoModal({
         <div className="mb-4 flex items-start justify-between gap-2">
           <div>
             <h2 className="text-xl font-bold text-[#F4750A]">{video.title}</h2>
-            <p className="text-sm text-gray-600">{video.subtitle}</p>
+            <p className="text-sm text-gray-600">
+              {video.animation_config.subtitle}
+            </p>
           </div>
           <button
             type="button"
@@ -51,19 +53,21 @@ function VideoModal({
           </button>
         </div>
 
-        <AnimationCanvas config={video.config} />
+        <AnimationCanvas config={video.animation_config} />
 
-        <div className="mt-4">
-          <a
-            href={video.video_url}
-            download={`${video.title}.mp4`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-kiddo block text-center no-underline"
-          >
-            ⬇ Tải MP4
-          </a>
-        </div>
+        {video.mp4_url && (
+          <div className="mt-4">
+            <a
+              href={video.mp4_url}
+              download={`${video.title}.mp4`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-kiddo block text-center no-underline"
+            >
+              ⬇ Tải MP4
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -76,26 +80,15 @@ export default function HistoryPage() {
   const [selected, setSelected] = useState<Video | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const data = await getVideos();
-        if (!cancelled) setVideos(data);
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "Không tải được lịch sử",
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    getVideos()
+      .then(setVideos)
+      .catch((err) => {
+        console.error(err);
+        setError(
+          err instanceof Error ? err.message : "Không tải được lịch sử",
+        );
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -150,6 +143,7 @@ export default function HistoryPage() {
                 <h2 className="font-bold text-[#F4750A]">{video.title}</h2>
                 <p className="text-xs text-gray-500">
                   {new Date(video.created_at).toLocaleDateString("vi-VN")}
+                  {video.duration ? ` · ${video.duration}s` : ""}
                 </p>
                 <div className="mt-3 flex flex-col gap-2">
                   <button
@@ -159,15 +153,17 @@ export default function HistoryPage() {
                   >
                     Xem lại
                   </button>
-                  <a
-                    href={video.video_url}
-                    download={`${video.title}.mp4`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn-kiddo block text-center no-underline"
-                  >
-                    ⬇ Tải MP4
-                  </a>
+                  {video.mp4_url && (
+                    <a
+                      href={video.mp4_url}
+                      download={`${video.title}.mp4`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-kiddo block text-center no-underline"
+                    >
+                      ⬇ Tải MP4
+                    </a>
+                  )}
                 </div>
               </div>
             </article>

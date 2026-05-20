@@ -1,87 +1,86 @@
-import { randomUUID } from "crypto";
-import { saveVideo, uploadFile } from "@/lib/supabase";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import type { AnimationConfig } from "@/types/animation";
-import { NextResponse } from "next/server";
 
-export async function POST(request: Request) {
-  let formData: FormData;
-
+export async function POST(req: NextRequest) {
   try {
-    formData = await request.formData();
-  } catch {
-    return NextResponse.json(
-      { error: "Expected multipart form data" },
-      { status: 400 },
+    const formData = await req.formData();
+    const configRaw = formData.get("config");
+    const titleRaw = formData.get("title");
+    const thumbnail = formData.get("thumbnail");
+    const mp4 = formData.get("mp4");
+
+    if (!configRaw || typeof configRaw !== "string") {
+      return NextResponse.json({ error: "config is required" }, { status: 400 });
+    }
+
+    const config = JSON.parse(configRaw) as AnimationConfig;
+    const title =
+      (typeof titleRaw === "string" ? titleRaw : null) ||
+      config.title ||
+      "Untitled";
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
-  }
 
-  const title = formData.get("title");
-  const configRaw = formData.get("config");
-  const thumbnail = formData.get("thumbnail");
-  const mp4 = formData.get("mp4");
+    let thumbnail_url: string | null = null;
+    let mp4_url: string | null = null;
+    const timestamp = Date.now();
 
-  if (!title || typeof title !== "string") {
-    return NextResponse.json({ error: "title is required" }, { status: 400 });
-  }
+    if (thumbnail instanceof File) {
+      const thumbBuffer = await thumbnail.arrayBuffer();
+      const thumbPath = `thumb_${timestamp}.jpg`;
+      const { error: thumbError } = await supabase.storage
+        .from("thumbnails")
+        .upload(thumbPath, thumbBuffer, {
+          contentType: "image/jpeg",
+          upsert: true,
+        });
+      if (!thumbError) {
+        const { data } = supabase.storage
+          .from("thumbnails")
+          .getPublicUrl(thumbPath);
+        thumbnail_url = data.publicUrl;
+      }
+    }
 
-  if (!configRaw || typeof configRaw !== "string") {
-    return NextResponse.json({ error: "config is required" }, { status: 400 });
-  }
+    if (mp4 instanceof File) {
+      const mp4Buffer = await mp4.arrayBuffer();
+      const mp4Path = `video_${timestamp}.mp4`;
+      const { error: mp4Error } = await supabase.storage
+        .from("videos")
+        .upload(mp4Path, mp4Buffer, {
+          contentType: "video/mp4",
+          upsert: true,
+        });
+      if (!mp4Error) {
+        const { data } = supabase.storage.from("videos").getPublicUrl(mp4Path);
+        mp4_url = data.publicUrl;
+      }
+    }
 
-  if (!(thumbnail instanceof File)) {
-    return NextResponse.json(
-      { error: "thumbnail file is required" },
-      { status: 400 },
-    );
-  }
+    const { data, error } = await supabase
+      .from("videos")
+      .insert([
+        {
+          title,
+          animation_config: config,
+          thumbnail_url,
+          mp4_url,
+          duration: config.duration || 10,
+        },
+      ])
+      .select()
+      .single();
 
-  if (!(mp4 instanceof File)) {
-    return NextResponse.json({ error: "mp4 file is required" }, { status: 400 });
-  }
+    if (error) throw error;
 
-  let config: AnimationConfig;
-  try {
-    config = JSON.parse(configRaw) as AnimationConfig;
-  } catch {
-    return NextResponse.json(
-      { error: "config must be valid JSON" },
-      { status: 400 },
-    );
-  }
-
-  if (!config.subtitle) {
-    return NextResponse.json(
-      { error: "config must include subtitle" },
-      { status: 400 },
-    );
-  }
-
-  const id = randomUUID();
-  const thumbPath = `${id}.jpg`;
-  const videoPath = `${id}.mp4`;
-
-  try {
-    const [thumbnailUrl, mp4Url] = await Promise.all([
-      uploadFile("thumbnails", thumbPath, thumbnail),
-      uploadFile("videos", videoPath, mp4),
-    ]);
-
-    const video = await saveVideo({
-      title,
-      subtitle: config.subtitle,
-      config,
-      video_url: mp4Url,
-      thumbnail_url: thumbnailUrl,
-    });
-
-    return NextResponse.json({
-      id: video.id,
-      thumbnail_url: thumbnailUrl,
-      mp4_url: mp4Url,
-    });
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Failed to save video";
+    return NextResponse.json(data);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("Save video error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
