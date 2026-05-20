@@ -15,7 +15,6 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [aiVideoUrl, setAiVideoUrl] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState(6);
-  const [hasAudio, setHasAudio] = useState(false);
 
   const isAnalyzing = images.some((im) => im.status === "processing");
 
@@ -31,8 +30,17 @@ export default function Home() {
     imagesRef.current = images;
   }, [images]);
 
+  useEffect(() => {
+    if (currentImage) {
+      console.log("spriteBase64 exists:", !!currentImage.spriteBase64);
+      console.log("spriteStatus:", currentImage.spriteStatus);
+    }
+  }, [currentImage]);
+
   const processSprite = useCallback(
     async (base64: string, mimeType: string, id: string) => {
+      console.log("processSprite called with:", mimeType);
+
       setImages((prev) =>
         prev.map((im) =>
           im.id === id ? { ...im, spriteStatus: "processing" as const } : im,
@@ -47,6 +55,12 @@ export default function Home() {
         });
 
         const data = await res.json();
+        console.log("remove-bg response:", {
+          ok: res.ok,
+          usedFallback: data.usedFallback,
+          hasResult: !!data.resultBase64,
+        });
+
         if (!res.ok) {
           throw new Error(data.error ?? "Remove.bg failed");
         }
@@ -217,13 +231,10 @@ export default function Home() {
         <DurationSelector
           value={videoDuration}
           onChange={setVideoDuration}
-          hasAudio={hasAudio}
-          onAudioChange={setHasAudio}
         />
 
         <QuoteCalculator
           selectedDuration={videoDuration}
-          hasAudio={hasAudio}
           onDurationChange={setVideoDuration}
         />
 
@@ -309,7 +320,6 @@ export default function Home() {
                 mimeType={currentImage.mimeType}
                 animationConfig={animationConfig}
                 duration={videoDuration}
-                hasAudio={hasAudio}
                 onVideoReady={(url) => setAiVideoUrl(url)}
                 onExportComplete={(video) =>
                   console.log("Saved:", video.id)

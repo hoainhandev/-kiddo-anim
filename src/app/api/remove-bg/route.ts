@@ -6,6 +6,9 @@ export async function POST(req: NextRequest) {
     const { imageBase64, mimeType } = await req.json();
 
     const apiKey = process.env.REMOVEBG_API_KEY;
+    console.log("REMOVEBG_API_KEY exists:", !!apiKey);
+    console.log("REMOVEBG_API_KEY prefix:", apiKey?.slice(0, 8));
+
     if (!apiKey || apiKey === "your_key_here") {
       await logCost({
         api_name: "removebg",
@@ -40,15 +43,21 @@ export async function POST(req: NextRequest) {
       body: formData,
     });
 
+    console.log("Remove.bg response status:", response.status);
+    console.log(
+      "Remove.bg response headers:",
+      Object.fromEntries(response.headers.entries()),
+    );
+
     if (!response.ok) {
-      const err = await response.text();
-      console.error("Remove.bg error:", err);
+      const errorText = await response.text();
+      console.log("Remove.bg error:", errorText);
       await logCost({
         api_name: "removebg",
         action: "remove_bg",
         status: "error",
         cost_usd: 0,
-        error_message: err.slice(0, 200),
+        error_message: errorText.slice(0, 200),
         metadata: { usedFallback: true },
       });
       return NextResponse.json({

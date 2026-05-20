@@ -4,13 +4,11 @@ import { useState } from "react";
 
 interface QuoteCalculatorProps {
   selectedDuration?: number;
-  hasAudio?: boolean;
   onDurationChange?: (duration: number) => void;
 }
 
 export default function QuoteCalculator({
   selectedDuration: controlledDuration,
-  hasAudio = false,
   onDurationChange,
 }: QuoteCalculatorProps) {
   const [internalDuration, setInternalDuration] = useState(6);
@@ -27,23 +25,14 @@ export default function QuoteCalculator({
   const [isExpanded, setIsExpanded] = useState(false);
 
   const COSTS = {
-    hailuo: {
-      standard: { noAudio: 0.08, withAudio: 0.16 },
-      pro: { noAudio: 0.112, withAudio: 0.224 },
-    },
+    hailuo: { standard: 0.08, pro: 0.112 },
     claude: 0.01,
     removebg: 0.1,
     markup: 2.0,
   };
 
   const hailuoRate =
-    quality === "pro"
-      ? hasAudio
-        ? COSTS.hailuo.pro.withAudio
-        : COSTS.hailuo.pro.noAudio
-      : hasAudio
-        ? COSTS.hailuo.standard.withAudio
-        : COSTS.hailuo.standard.noAudio;
+    quality === "pro" ? COSTS.hailuo.pro : COSTS.hailuo.standard;
 
   const hailuoCost = duration * hailuoRate;
   const techCostPerVideo =
@@ -65,7 +54,6 @@ export default function QuoteCalculator({
 ⏱ Thời lượng: ${duration}s/video
 ✨ Chất lượng: ${quality === "pro" ? "Pro (1080p)" : "Standard (720p)"}
 🎭 Tách nhân vật: ${includeSprite ? "Có" : "Không"}
-🎵 Nhạc nền: ${hasAudio ? "Có" : "Không"}
 ━━━━━━━━━━━━━━━━━━━━
 💰 Đơn giá: ${formatUSD(pricePerVideo)}/video (~${formatVND(pricePerVideo)})
 × ${quantity} video
@@ -412,21 +400,6 @@ export default function QuoteCalculator({
               border: "1.5px solid rgba(244,117,10,0.2)",
             }}
           >
-            {hasAudio && (
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 12,
-                  color: "#8A6040",
-                  padding: "4px 0",
-                }}
-              >
-                <span>🎵 Nhạc nền (×2 chi phí)</span>
-                <span style={{ color: "#F4750A" }}>+included</span>
-              </div>
-            )}
-
             <div
               style={{
                 display: "flex",

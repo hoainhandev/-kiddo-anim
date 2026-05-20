@@ -5,9 +5,7 @@ import { rateLimit } from "@/lib/rateLimit";
 
 export const maxDuration = 300;
 
-const HAILUO_MODEL_FAST =
-  "fal-ai/minimax/hailuo-02-fast/standard/image-to-video";
-const HAILUO_MODEL_AUDIO = "fal-ai/minimax/hailuo-2.3/pro/image-to-video";
+const model = "fal-ai/minimax/hailuo-2.3-fast/standard/image-to-video";
 
 function extractVideoUrl(data: unknown): string | null {
   const d = data as { video?: { url?: string } };
@@ -45,24 +43,32 @@ export async function POST(req: NextRequest) {
   }
 
   let duration = 6;
-  let hasAudio = false;
 
   try {
     const body = await req.json();
-    console.log("Request body keys:", Object.keys(body));
-    console.log("hasAudio received:", body.hasAudio);
-
     const {
       imageBase64,
       mimeType,
       prompt,
       duration: reqDuration = 6,
-      hasAudio: reqHasAudio = false,
     } = body;
 
     duration = Number(reqDuration) || 6;
-    hasAudio = Boolean(reqHasAudio);
-    const actualCost = calcHailuoCost(duration, "standard", hasAudio);
+
+    console.log("=== GENERATE VIDEO ===");
+    console.log("duration:", duration);
+    console.log("model selected:", model);
+
+    const finalPrompt = String(prompt ?? "");
+
+    console.log("prompt length:", finalPrompt.length);
+    console.log(
+      "image size:",
+      (String(imageBase64 ?? "").length * 0.75 / 1024).toFixed(0),
+      "KB",
+    );
+
+    const actualCost = calcHailuoCost(duration, "standard", false);
 
     const apiKey = process.env.FAL_API_KEY;
     if (!apiKey) {
@@ -75,21 +81,14 @@ export async function POST(req: NextRequest) {
     fal.config({ credentials: apiKey });
 
     const imageUrl = `data:${mimeType ?? "image/png"};base64,${imageBase64}`;
-    const basePrompt = String(prompt ?? "");
-    const model = hasAudio ? HAILUO_MODEL_AUDIO : HAILUO_MODEL_FAST;
 
     const input = {
-      prompt: hasAudio
-        ? `${basePrompt}. Include cheerful upbeat children's background music.`
-        : basePrompt,
+      prompt: finalPrompt,
       image_url: imageUrl,
     };
 
-    console.log("Model:", model);
-    console.log("Has audio:", hasAudio);
     console.log("Submitting to fal.ai:", {
       model,
-      hasAudio,
       inputKeys: Object.keys(input),
     });
 
@@ -115,7 +114,7 @@ export async function POST(req: NextRequest) {
       status: "success",
       cost_usd: actualCost,
       duration_seconds: duration,
-      has_audio: hasAudio,
+      has_audio: false,
       metadata: { requestId: result.requestId, modelId: model },
     });
 
@@ -123,8 +122,7 @@ export async function POST(req: NextRequest) {
       videoUrl: videoUrlFromResult,
       requestId: result.requestId,
       modelId: model,
-      hasAudio,
-      prompt: input.prompt,
+      prompt: finalPrompt,
     });
   } catch (err: unknown) {
     console.log("Full error:", serializeError(err));
@@ -132,14 +130,14 @@ export async function POST(req: NextRequest) {
       err instanceof Error ? err.message : "Video generation failed";
     console.error("Generate video error:", message);
 
-    const actualCost = calcHailuoCost(duration, "standard", hasAudio);
+    const actualCost = calcHailuoCost(duration, "standard", false);
     await logCost({
       api_name: "hailuo",
       action: "generate_video",
       status: "error",
       cost_usd: actualCost,
       duration_seconds: duration,
-      has_audio: hasAudio,
+      has_audio: false,
       error_message: message,
     });
 

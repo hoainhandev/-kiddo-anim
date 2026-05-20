@@ -8,17 +8,8 @@ interface VideoGeneratorProps {
   mimeType: string;
   animationConfig: AnimationConfig;
   duration?: number;
-  hasAudio?: boolean;
   onVideoReady: (videoUrl: string) => void;
   onExportComplete?: (video: Video) => void;
-}
-
-const AUDIO_PROMPT_SUFFIX =
-  " Background music: cheerful, playful children's music that matches the scene mood.";
-
-function buildFinalPrompt(prompt: string, hasAudio: boolean): string {
-  if (!hasAudio) return prompt;
-  return `${prompt}${AUDIO_PROMPT_SUFFIX}`;
 }
 
 type Step = "idle" | "generating-prompt" | "generating-video" | "done" | "error";
@@ -28,12 +19,9 @@ export default function VideoGenerator({
   mimeType,
   animationConfig,
   duration = 6,
-  hasAudio = false,
   onVideoReady,
   onExportComplete,
 }: VideoGeneratorProps) {
-  console.log("VideoGenerator hasAudio prop:", hasAudio);
-
   const [step, setStep] = useState<Step>("idle");
   const [prompt, setPrompt] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
@@ -54,7 +42,6 @@ export default function VideoGenerator({
             ...animationConfig,
             prompt: promptText,
             duration,
-            hasAudio,
             generatedBy: "hailuo",
           },
           mp4_url: videoUrlRemote,
@@ -101,10 +88,7 @@ export default function VideoGenerator({
     setStep("generating-video");
     setError("");
     try {
-      const basePrompt = editablePrompt || prompt;
-      const finalPrompt = buildFinalPrompt(basePrompt, hasAudio);
-
-      console.log("generateVideo sending hasAudio:", hasAudio ?? false);
+      const promptText = editablePrompt || prompt;
 
       const res = await fetch("/api/generate-video", {
         method: "POST",
@@ -112,9 +96,8 @@ export default function VideoGenerator({
         body: JSON.stringify({
           imageBase64,
           mimeType,
-          prompt: editablePrompt || prompt,
+          prompt: promptText,
           duration,
-          hasAudio: hasAudio ?? false,
         }),
       });
       const data = await res.json();
@@ -131,7 +114,7 @@ export default function VideoGenerator({
       onVideoReady(data.videoUrl);
       await saveToHistory(
         data.videoUrl,
-        (data.prompt as string) || finalPrompt,
+        (data.prompt as string) || promptText,
       );
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Video generation failed");
@@ -218,32 +201,12 @@ export default function VideoGenerator({
               outline: "none",
             }}
           />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button
-              type="button"
-              onClick={generatePrompt}
-              disabled={isLoading}
-              style={{
-                flex: 1,
-                padding: "9px 0",
-                background: "rgba(244,117,10,0.1)",
-                color: "#F4750A",
-                border: "1.5px solid rgba(244,117,10,0.3)",
-                borderRadius: 24,
-                fontSize: 12,
-                fontFamily: "Georgia, serif",
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
-            >
-              🔄 Tạo lại prompt
-            </button>
-            <button
+          <button
               type="button"
               onClick={generateVideo}
               disabled={isLoading}
               style={{
-                flex: 2,
+                width: "100%",
                 padding: "9px 0",
                 background: "linear-gradient(135deg, #3a9e3a, #2a7e2a)",
                 color: "#fff",
@@ -259,7 +222,6 @@ export default function VideoGenerator({
             >
               🚀 Tạo video AI
             </button>
-          </div>
         </div>
       )}
 
@@ -276,10 +238,10 @@ export default function VideoGenerator({
         >
           <div style={{ fontSize: 32 }}>⏳</div>
           <div style={{ color: "#F4750A", fontWeight: 700, fontSize: 14 }}>
-            ⏳ Hailuo đang tạo video{hasAudio ? " + nhạc" : ""}...
+            ⏳ Hailuo đang tạo video...
           </div>
           <div style={{ color: "#8A6040", fontSize: 12 }}>
-            Thường mất {hasAudio ? "2–4" : "1–3"} phút, vui lòng chờ
+            Thường mất 1–3 phút, vui lòng chờ
           </div>
           <div
             style={{

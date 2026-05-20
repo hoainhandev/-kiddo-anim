@@ -2,66 +2,93 @@
 
 import { useEffect, useState } from "react";
 
-type BreakdownEntry = {
-  total: number;
-  count: number;
-  errors: number;
-};
-
-type CostTransaction = {
-  id: string;
+type RecentActivity = {
   created_at: string;
-  api_name: string;
-  action: string;
-  status: string;
-  cost_usd: number;
-  duration_seconds: number | null;
-  has_audio: boolean | null;
-  error_message: string | null;
+  duration_seconds: number;
+  has_audio: boolean;
+  client_price: number;
 };
 
-type CostSummary = {
-  total: number;
-  totalSuccess: number;
-  totalWasted: number;
-  todayTotal: number;
-  monthTotal: number;
-  breakdown: Record<string, BreakdownEntry>;
-  recent: CostTransaction[];
-  totalTransactions: number;
-  successfulVideos: number;
-  estimatedRevenue: number;
-  estimatedProfit: number;
-  avgCostPerVideo: number;
+type UsageSummary = {
+  todayVideos: number;
+  monthVideos: number;
+  totalVideos: number;
+  totalDurationSeconds: number;
+  todayBill: number;
+  monthBill: number;
+  totalBill: number;
+  recentActivity: RecentActivity[];
   error?: string;
 };
 
-const apiColors: Record<string, string> = {
-  hailuo: "#F4750A",
-  claude: "#7B6FCC",
-  removebg: "#2a8a2a",
-};
+function fmtUsd(n: number) {
+  return `$${n.toFixed(2)}`;
+}
 
-const apiLabels: Record<string, string> = {
-  hailuo: "🎬 Hailuo (video)",
-  claude: "🤖 Claude (AI)",
-  removebg: "✂️ Remove.bg",
-};
+function fmtVnd(usd: number) {
+  const vnd = usd * 25000;
+  return vnd >= 1_000_000
+    ? `~${(vnd / 1_000_000).toFixed(1)}tr đ`
+    : `~${(vnd / 1000).toFixed(0)}k đ`;
+}
+
+function formatDateTime(iso: string) {
+  const d = new Date(iso);
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  const hour = String(d.getHours()).padStart(2, "0");
+  const minute = String(d.getMinutes()).padStart(2, "0");
+  return `${day}/${month}/${year} ${hour}:${minute}`;
+}
 
 export default function CostsPage() {
-  const [data, setData] = useState<CostSummary | null>(null);
+  const [data, setData] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/cost-summary")
       .then((r) => r.json())
-      .then((json) => setData(json as CostSummary))
+      .then((json) => setData(json as UsageSummary))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
-  const fmt = (n: number) => `$${n.toFixed(4)}`;
-  const fmtVND = (usd: number) => `${(usd * 25000 / 1000).toFixed(0)}k đ`;
+  const isEmpty =
+    !loading && data && !data.error && data.totalVideos === 0;
+
+  const summaryCards = data
+    ? [
+        {
+          label: "Hôm nay",
+          videos: data.todayVideos,
+          bill: data.todayBill,
+          icon: "📅",
+          highlight: false,
+        },
+        {
+          label: "Tháng này",
+          videos: data.monthVideos,
+          bill: data.monthBill,
+          icon: "📆",
+          highlight: false,
+        },
+        {
+          label: "Tổng video",
+          videos: data.totalVideos,
+          bill: null as number | null,
+          icon: "🎬",
+          highlight: false,
+        },
+        {
+          label: "Cần thanh toán",
+          videos: null as number | null,
+          bill: data.totalBill,
+          icon: "💳",
+          highlight: true,
+        },
+      ]
+    : [];
 
   return (
     <main
@@ -72,7 +99,7 @@ export default function CostsPage() {
         className="mb-6 text-2xl font-bold text-[#F4750A]"
         style={{ fontFamily: "Georgia, serif" }}
       >
-        💰 Chi phí thực tế
+        📊 Thống kê sử dụng
       </h1>
 
       {loading && (
@@ -87,250 +114,197 @@ export default function CostsPage() {
         </p>
       )}
 
-      {data && !data.error && (
+      {isEmpty && (
+        <p className="kiddo-card text-center text-gray-600">
+          Chưa có video nào được tạo
+        </p>
+      )}
+
+      {data && !data.error && data.totalVideos > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
               gap: 12,
             }}
           >
-            {[
-              { label: "Hôm nay", value: data.todayTotal, icon: "📅" },
-              { label: "Tháng này", value: data.monthTotal, icon: "📆" },
-              { label: "Tổng cộng", value: data.total, icon: "💳" },
-              {
-                label: "Chi phí lỗi",
-                value: data.totalWasted,
-                icon: "⚠️",
-                warn: data.totalWasted > 0,
-              },
-            ].map((card) => (
+            {summaryCards.map((card) => (
               <div
                 key={card.label}
                 style={{
-                  background: "rgba(255,255,255,0.9)",
-                  border: `2px solid ${card.warn ? "rgba(232,64,64,0.3)" : "rgba(244,117,10,0.2)"}`,
+                  background: card.highlight
+                    ? "rgba(244,117,10,0.06)"
+                    : "rgba(255,255,255,0.9)",
+                  border: card.highlight
+                    ? "2px solid rgba(244,117,10,0.5)"
+                    : "2px solid rgba(244,117,10,0.2)",
                   borderRadius: 14,
                   padding: 16,
                   textAlign: "center",
                 }}
               >
                 <div style={{ fontSize: 24, marginBottom: 6 }}>{card.icon}</div>
-                <div style={{ fontSize: 11, color: "#8A6040", marginBottom: 4 }}>
+                <div style={{ fontSize: 11, color: "#8A6040", marginBottom: 6 }}>
                   {card.label}
                 </div>
-                <div
-                  style={{
-                    fontSize: 20,
-                    fontWeight: 700,
-                    color: card.warn ? "#cc3030" : "#F4750A",
-                  }}
-                >
-                  {fmt(card.value)}
-                </div>
-                <div style={{ fontSize: 11, color: "#8A6040" }}>
-                  {fmtVND(card.value)}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div
-            style={{
-              background:
-                "linear-gradient(135deg, rgba(40,160,40,0.08), rgba(255,215,0,0.06))",
-              border: "2px solid rgba(40,160,40,0.2)",
-              borderRadius: 14,
-              padding: 20,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 16,
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 700, color: "#2a6a2a", fontSize: 16 }}>
-                💹 Lợi nhuận ước tính
-              </div>
-              <div style={{ fontSize: 12, color: "#5a8a5a", marginTop: 4 }}>
-                Dựa trên {data.successfulVideos ?? 0} video thành công × $2.00
-                markup
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-              <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 11, color: "#5a8a5a" }}>Chi phí API</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: "#cc3030" }}>
-                  -{fmt(data.totalSuccess)}
-                </div>
-              </div>
-              <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 11, color: "#5a8a5a" }}>
-                  Doanh thu (ước tính)
-                </div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: "#2a8a2a" }}>
-                  +{fmt(data.estimatedRevenue ?? 0)}
-                </div>
-              </div>
-              <div style={{ textAlign: "center" }}>
-                <div style={{ fontSize: 11, color: "#5a8a5a" }}>Lợi nhuận</div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: "#1a6a1a" }}>
-                  {fmt(data.estimatedProfit ?? 0)}
-                </div>
-                <div style={{ fontSize: 11, color: "#5a8a5a" }}>
-                  ~{fmtVND(data.estimatedProfit ?? 0)}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="kiddo-card"
-            style={{ padding: 20 }}
-          >
-            <div style={{ fontWeight: 700, color: "#2A1A00", marginBottom: 14 }}>
-              📊 Chi tiết theo API
-            </div>
-            {Object.keys(data.breakdown).length === 0 && (
-              <p style={{ fontSize: 12, color: "#8A6040" }}>
-                Chưa có giao dịch nào được ghi nhận.
-              </p>
-            )}
-            {Object.entries(data.breakdown).map(([api, info]) => (
-              <div
-                key={api}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "10px 0",
-                  borderBottom: "1px solid rgba(244,117,10,0.08)",
-                  flexWrap: "wrap",
-                }}
-              >
-                <div
-                  style={{
-                    width: 140,
-                    fontSize: 13,
-                    color: "#2A1A00",
-                    fontWeight: 600,
-                  }}
-                >
-                  {apiLabels[api] || api}
-                </div>
-                <div
-                  style={{
-                    flex: 1,
-                    minWidth: 120,
-                    height: 8,
-                    background: "rgba(0,0,0,0.06)",
-                    borderRadius: 4,
-                    overflow: "hidden",
-                  }}
-                >
+                {card.videos != null && (
                   <div
                     style={{
-                      height: "100%",
-                      width: `${data.total > 0 ? Math.min((info.total / data.total) * 100, 100) : 0}%`,
-                      background: apiColors[api] || "#888",
-                      borderRadius: 4,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: "#2A1A00",
+                      marginBottom: 4,
                     }}
-                  />
-                </div>
-                <div style={{ textAlign: "right", minWidth: 120 }}>
-                  <div style={{ fontWeight: 700, color: apiColors[api] || "#888" }}>
-                    {fmt(info.total)}
+                  >
+                    {card.videos} video
                   </div>
-                  <div style={{ fontSize: 11, color: "#8A6040" }}>
-                    {info.count} calls
-                    {info.errors > 0 && (
-                      <span style={{ color: "#cc3030" }}>
-                        {" "}
-                        · {info.errors} lỗi
-                      </span>
-                    )}
-                  </div>
-                </div>
+                )}
+                {card.bill != null && (
+                  <>
+                    <div
+                      style={{
+                        fontSize: card.highlight ? 22 : 18,
+                        fontWeight: 700,
+                        color: "#F4750A",
+                      }}
+                    >
+                      {fmtUsd(card.bill)}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#8A6040" }}>
+                      {fmtVnd(card.bill)}
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
 
-          <div className="kiddo-card" style={{ padding: 20 }}>
+          <div className="kiddo-card" style={{ padding: 20, overflowX: "auto" }}>
             <div style={{ fontWeight: 700, color: "#2A1A00", marginBottom: 14 }}>
-              🕐 Giao dịch gần đây ({data.totalTransactions})
+              🕐 Hoạt động gần đây
             </div>
-            {data.recent.length === 0 && (
-              <p style={{ fontSize: 12, color: "#8A6040" }}>
-                Chưa có giao dịch. Tạo video hoặc phân tích ảnh để bắt đầu ghi nhận
-                chi phí.
-              </p>
-            )}
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              {data.recent.map((c) => (
-                <div
-                  key={c.id}
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontSize: 13,
+              }}
+            >
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(244,117,10,0.2)" }}>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "8px 10px",
+                      color: "#8A6040",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Ngày
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "8px 10px",
+                      color: "#8A6040",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Thời lượng
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "left",
+                      padding: "8px 10px",
+                      color: "#8A6040",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Nhạc
+                  </th>
+                  <th
+                    style={{
+                      textAlign: "right",
+                      padding: "8px 10px",
+                      color: "#8A6040",
+                      fontWeight: 700,
+                    }}
+                  >
+                    Đơn giá
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.recentActivity.map((item, index) => (
+                  <tr
+                    key={`${item.created_at}-${index}`}
+                    style={{
+                      borderBottom: "1px solid rgba(244,117,10,0.08)",
+                    }}
+                  >
+                    <td style={{ padding: "10px", color: "#2A1A00" }}>
+                      {formatDateTime(item.created_at)}
+                    </td>
+                    <td style={{ padding: "10px", color: "#8A6040" }}>
+                      {item.duration_seconds}s
+                    </td>
+                    <td style={{ padding: "10px" }}>
+                      {item.has_audio ? (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            background: "rgba(255,215,0,0.15)",
+                            color: "#8A5000",
+                            padding: "2px 7px",
+                            borderRadius: 10,
+                            border: "1px solid rgba(255,215,0,0.3)",
+                            fontWeight: 700,
+                          }}
+                        >
+                          🎵 Có nhạc
+                        </span>
+                      ) : (
+                        <span style={{ color: "#8A6040" }}>-</span>
+                      )}
+                    </td>
+                    <td style={{ padding: "10px", textAlign: "right" }}>
+                      <div style={{ fontWeight: 700, color: "#2A1A00" }}>
+                        {fmtUsd(item.client_price)}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#8A6040" }}>
+                        {fmtVnd(item.client_price)}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                <tr
                   style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "9px 0",
-                    borderBottom: "1px solid rgba(244,117,10,0.06)",
-                    fontSize: 12,
+                    borderTop: "2px solid rgba(244,117,10,0.2)",
+                    fontWeight: 700,
                   }}
                 >
-                  <span style={{ fontSize: 16 }}>
-                    {c.status === "success" ? "✅" : "❌"}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <td colSpan={3} style={{ padding: "12px 10px", color: "#2A1A00" }}>
+                    Tổng cộng ({data.totalVideos} videos)
+                  </td>
+                  <td style={{ padding: "12px 10px", textAlign: "right" }}>
+                    <span style={{ color: "#F4750A", fontSize: 18 }}>
+                      {fmtUsd(data.totalBill)}
+                    </span>
                     <span
                       style={{
-                        fontWeight: 600,
-                        color: apiColors[c.api_name] || "#888",
+                        display: "block",
+                        fontSize: 12,
+                        color: "#8A6040",
+                        fontWeight: 400,
                       }}
                     >
-                      {apiLabels[c.api_name] || c.api_name}
+                      ({fmtVnd(data.totalBill)})
                     </span>
-                    <span style={{ color: "#8A6040", marginLeft: 6 }}>
-                      {c.action}
-                      {c.has_audio && " 🎵"}
-                      {c.duration_seconds != null && ` · ${c.duration_seconds}s`}
-                    </span>
-                    {c.error_message && (
-                      <div
-                        style={{
-                          color: "#cc3030",
-                          fontSize: 11,
-                          marginTop: 2,
-                        }}
-                      >
-                        {c.error_message.slice(0, 60)}
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <div
-                      style={{
-                        fontWeight: 700,
-                        color: c.status === "error" ? "#cc3030" : "#2A1A00",
-                      }}
-                    >
-                      {fmt(c.cost_usd)}
-                    </div>
-                    <div style={{ fontSize: 10, color: "#8A6040" }}>
-                      {new Date(c.created_at).toLocaleString("vi-VN", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       )}

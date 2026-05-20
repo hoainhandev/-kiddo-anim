@@ -94,7 +94,7 @@ export default function KiddoHeader() {
                 : "border-2 border-[#F4750A] text-[#F4750A] hover:bg-orange-50"
             }`}
           >
-            Chi phí
+            Thống kê
           </Link>
         </nav>
       </div>

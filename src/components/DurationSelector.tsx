@@ -3,15 +3,11 @@
 interface DurationSelectorProps {
   value: number;
   onChange: (duration: number) => void;
-  hasAudio: boolean;
-  onAudioChange: (hasAudio: boolean) => void;
 }
 
 export default function DurationSelector({
   value,
   onChange,
-  hasAudio,
-  onAudioChange,
 }: DurationSelectorProps) {
   const options = [
     { seconds: 6, label: "6 giây", note: "Đề xuất · Tiết kiệm", highlight: true },
@@ -123,6 +119,8 @@ export default function DurationSelector({
         ))}
       </div>
 
+      {/* AUDIO FEATURE - COMING SOON */}
+      {/*
       <div
         style={{
           marginTop: 14,
@@ -133,91 +131,9 @@ export default function DurationSelector({
           justifyContent: "space-between",
         }}
       >
-        <div>
-          <div
-            style={{
-              fontWeight: 700,
-              color: "#2A1A00",
-              fontSize: 13,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            🎵 Có nhạc nền
-            <span
-              style={{
-                fontSize: 10,
-                background: "rgba(232,64,64,0.08)",
-                color: "#cc3030",
-                padding: "1px 7px",
-                borderRadius: 10,
-                border: "1px solid rgba(232,64,64,0.15)",
-                fontWeight: 600,
-              }}
-            >
-              +chi phí
-            </span>
-          </div>
-          <div style={{ fontSize: 11, color: "#8A6040", marginTop: 3 }}>
-            Hailuo tự tạo nhạc phù hợp nội dung
-          </div>
-        </div>
-        <div
-          role="switch"
-          aria-checked={hasAudio}
-          tabIndex={0}
-          onClick={() => onAudioChange(!hasAudio)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onAudioChange(!hasAudio);
-            }
-          }}
-          style={{
-            width: 44,
-            height: 24,
-            borderRadius: 12,
-            background: hasAudio ? "#F4750A" : "#ddd",
-            cursor: "pointer",
-            position: "relative",
-            transition: "background 0.2s",
-            flexShrink: 0,
-          }}
-        >
-          <div
-            style={{
-              width: 18,
-              height: 18,
-              borderRadius: "50%",
-              background: "#fff",
-              position: "absolute",
-              top: 3,
-              left: hasAudio ? 23 : 3,
-              transition: "left 0.2s",
-              boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
-            }}
-          />
-        </div>
+        ...
       </div>
-
-      {hasAudio && (
-        <div
-          style={{
-            marginTop: 10,
-            padding: "8px 12px",
-            background: "rgba(255,215,0,0.08)",
-            borderRadius: 8,
-            fontSize: 11,
-            color: "#7A5010",
-            lineHeight: 1.6,
-            border: "1px solid rgba(255,215,0,0.25)",
-          }}
-        >
-          🎵 Nhạc nền ~2x chi phí video · Model: Hailuo 2.3 · Thời gian tạo
-          lâu hơn ~1 phút
-        </div>
-      )}
+      */}
 
       <div
         style={{
