@@ -174,6 +174,12 @@ export interface AnimationConfig {
   characterStyle?: AnimationCharacterStyle;
   textSize?: AnimationTextSize;
   duration?: 8 | 10 | 15;
+  /** Set when persisted from AI video generation */
+  generatedBy?: "hailuo" | "canvas";
+  /** Motion prompt used for Hailuo */
+  prompt?: string;
+  /** Hailuo generated background music */
+  hasAudio?: boolean;
 }
 
 export interface Video {

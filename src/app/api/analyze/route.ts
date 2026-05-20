@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { API_COSTS, logCost } from "@/lib/costTracker";
+import { rateLimit } from "@/lib/rateLimit";
 import {
   DEFAULT_ANIMATION_OPTIONS,
   type AnimationBackground,
@@ -100,6 +102,14 @@ function parseOptions(raw: unknown): AnimationOptions {
 }
 
 export async function POST(req: NextRequest) {
+  const { allowed } = rateLimit("analyze-global", 20, 60000);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Quá nhiều yêu cầu. Thử lại sau." },
+      { status: 429 },
+    );
+  }
+
   try {
     const { imageBase64, mimeType, options: rawOptions } = await req.json();
 
@@ -279,10 +289,26 @@ Return ONLY the JSON object.`,
       .trim();
 
     const config = JSON.parse(raw);
+
+    await logCost({
+      api_name: "claude",
+      action: "analyze",
+      status: "success",
+      cost_usd: API_COSTS.claude_analyze,
+    });
+
     return NextResponse.json({ ...config, ...options });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Route error:", message);
+
+    await logCost({
+      api_name: "claude",
+      action: "analyze",
+      status: "error",
+      cost_usd: 0,
+      error_message: message,
+    });
     if (
       message.toLowerCase().includes("overloaded") ||
       message.includes("Anthropic API is overloaded")

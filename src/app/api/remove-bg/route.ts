@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { API_COSTS, logCost } from "@/lib/costTracker";
 
 export async function POST(req: NextRequest) {
   try {
@@ -6,6 +7,14 @@ export async function POST(req: NextRequest) {
 
     const apiKey = process.env.REMOVEBG_API_KEY;
     if (!apiKey || apiKey === "your_key_here") {
+      await logCost({
+        api_name: "removebg",
+        action: "remove_bg",
+        status: "error",
+        cost_usd: 0,
+        error_message: "API key not configured",
+        metadata: { usedFallback: true },
+      });
       return NextResponse.json({
         resultBase64: imageBase64,
         mimeType: mimeType ?? "image/png",
@@ -34,6 +43,14 @@ export async function POST(req: NextRequest) {
     if (!response.ok) {
       const err = await response.text();
       console.error("Remove.bg error:", err);
+      await logCost({
+        api_name: "removebg",
+        action: "remove_bg",
+        status: "error",
+        cost_usd: 0,
+        error_message: err.slice(0, 200),
+        metadata: { usedFallback: true },
+      });
       return NextResponse.json({
         resultBase64: imageBase64,
         mimeType: mimeType ?? "image/png",
@@ -44,6 +61,13 @@ export async function POST(req: NextRequest) {
     const resultBuffer = await response.arrayBuffer();
     const resultBase64 = Buffer.from(resultBuffer).toString("base64");
 
+    await logCost({
+      api_name: "removebg",
+      action: "remove_bg",
+      status: "success",
+      cost_usd: API_COSTS.removebg,
+    });
+
     return NextResponse.json({
       resultBase64,
       mimeType: "image/png",
@@ -52,6 +76,15 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("Remove bg error:", message);
+
+    await logCost({
+      api_name: "removebg",
+      action: "remove_bg",
+      status: "error",
+      cost_usd: 0,
+      error_message: message,
+    });
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

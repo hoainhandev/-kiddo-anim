@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import AnimationCanvas from "@/components/AnimationCanvas";
+import StorageUsage from "@/components/StorageUsage";
 import { getVideos } from "@/lib/supabase";
 import type { Video } from "@/types/animation";
 
@@ -53,7 +54,17 @@ function VideoModal({
           </button>
         </div>
 
-        <AnimationCanvas config={video.animation_config} />
+        {video.mp4_url ? (
+          <video
+            src={video.mp4_url}
+            controls
+            autoPlay
+            playsInline
+            style={{ width: "100%", borderRadius: 12 }}
+          />
+        ) : (
+          <AnimationCanvas config={video.animation_config} />
+        )}
 
         {video.mp4_url && (
           <div className="mt-4">
@@ -77,21 +88,19 @@ export default function HistoryPage() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Video | null>(null);
+  const [modalVideo, setModalVideo] = useState<Video | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showBulkBar, setShowBulkBar] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [storageRefreshKey, setStorageRefreshKey] = useState(0);
 
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
         setError(null);
-        console.log("Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-        console.log(
-          "Supabase KEY exists:",
-          !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-        );
-
         const data = await getVideos();
-        console.log("Videos loaded:", data);
         setVideos(data || []);
       } catch (err: unknown) {
         console.error("History load error:", err);
@@ -103,14 +112,87 @@ export default function HistoryPage() {
     load();
   }, []);
 
+  async function deleteVideo(video: Video) {
+    if (!confirm(`Xóa video "${video.title}"? Không thể hoàn tác.`)) return;
+
+    setDeleting(video.id);
+    try {
+      const res = await fetch("/api/delete-video", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: video.id,
+          mp4_url: video.mp4_url,
+          thumbnail_url: video.thumbnail_url,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? "Delete failed");
+      }
+      setVideos((prev) => prev.filter((v) => v.id !== video.id));
+      setSelectedIds((prev) => prev.filter((id) => id !== video.id));
+      if (modalVideo?.id === video.id) setModalVideo(null);
+      setStorageRefreshKey((prev) => prev + 1);
+    } catch (err: unknown) {
+      alert(
+        "Lỗi xóa: " + (err instanceof Error ? err.message : "Không xóa được"),
+      );
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  async function deleteBulk() {
+    if (!confirm(`Xóa ${selectedIds.length} video đã chọn?`)) return;
+
+    setBulkDeleting(true);
+    try {
+      for (const id of selectedIds) {
+        const video = videos.find((v) => v.id === id);
+        if (!video) continue;
+        const res = await fetch("/api/delete-video", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: video.id,
+            mp4_url: video.mp4_url,
+            thumbnail_url: video.thumbnail_url,
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error ?? "Delete failed");
+        }
+      }
+      setVideos((prev) => prev.filter((v) => !selectedIds.includes(v.id)));
+      if (modalVideo && selectedIds.includes(modalVideo.id)) {
+        setModalVideo(null);
+      }
+      setSelectedIds([]);
+      setShowBulkBar(false);
+      setStorageRefreshKey((prev) => prev + 1);
+    } catch (err: unknown) {
+      alert(
+        "Lỗi xóa: " + (err instanceof Error ? err.message : "Không xóa được"),
+      );
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-8">
+    <main className="mx-auto w-full max-w-4xl px-4 py-8 pb-24">
       <h1
         className="mb-6 text-2xl font-bold text-[#F4750A]"
         style={{ fontFamily: "Georgia, serif" }}
       >
         Lịch sử video
       </h1>
+
+      <div style={{ marginBottom: 20 }}>
+        <StorageUsage key={storageRefreshKey} />
+      </div>
 
       {error && (
         <div
@@ -162,21 +244,138 @@ export default function HistoryPage() {
       {!loading && videos.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {videos.map((video) => (
-            <article key={video.id} className="kiddo-card overflow-hidden p-0">
+            <article
+              key={video.id}
+              className="kiddo-card relative overflow-hidden p-0"
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(video.id)}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  setSelectedIds((prev) =>
+                    e.target.checked
+                      ? [...prev, video.id]
+                      : prev.filter((id) => id !== video.id),
+                  );
+                  setShowBulkBar(true);
+                }}
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  left: 10,
+                  width: 18,
+                  height: 18,
+                  cursor: "pointer",
+                  accentColor: "#F4750A",
+                  zIndex: 10,
+                }}
+                aria-label={`Chọn ${video.title}`}
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteVideo(video);
+                }}
+                disabled={deleting === video.id || bulkDeleting}
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  right: 8,
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  background: "rgba(232,64,64,0.85)",
+                  border: "none",
+                  color: "#fff",
+                  fontSize: 14,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: deleting === video.id ? 0.5 : 1,
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
+                  zIndex: 10,
+                }}
+                title="Xóa video"
+                aria-label={`Xóa ${video.title}`}
+              >
+                {deleting === video.id ? "⏳" : "🗑"}
+              </button>
+
               {video.thumbnail_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={video.thumbnail_url}
                   alt={video.title}
                   className="aspect-video w-full object-cover"
+                  style={{ borderRadius: "12px 12px 0 0" }}
                 />
               ) : (
-                <div className="flex aspect-video items-center justify-center bg-orange-50 text-4xl">
-                  🎬
+                <div
+                  style={{
+                    width: "100%",
+                    aspectRatio: "16/9",
+                    background:
+                      "linear-gradient(135deg, rgba(244,117,10,0.15), rgba(255,215,0,0.1))",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: "12px 12px 0 0",
+                  }}
+                >
+                  <span style={{ fontSize: 40 }}>🎬</span>
                 </div>
               )}
               <div className="p-4">
-                <h2 className="font-bold text-[#F4750A]">{video.title}</h2>
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <h2 className="font-bold text-[#F4750A]">{video.title}</h2>
+                  {video.animation_config?.generatedBy === "hailuo" ? (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        background: "rgba(40,160,40,0.12)",
+                        color: "#2a8a2a",
+                        padding: "2px 7px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(40,160,40,0.2)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      🤖 Hailuo AI
+                    </span>
+                  ) : (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        background: "rgba(244,117,10,0.1)",
+                        color: "#F4750A",
+                        padding: "2px 7px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(244,117,10,0.2)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      🎨 Canvas
+                    </span>
+                  )}
+                  {video.animation_config?.hasAudio && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        background: "rgba(255,215,0,0.15)",
+                        color: "#8A5000",
+                        padding: "2px 7px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(255,215,0,0.3)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      🎵 Có nhạc
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-500">
                   {new Date(video.created_at).toLocaleDateString("vi-VN")}
                   {video.duration ? ` · ${video.duration}s` : ""}
@@ -185,7 +384,7 @@ export default function HistoryPage() {
                   <button
                     type="button"
                     className="btn-kiddo"
-                    onClick={() => setSelected(video)}
+                    onClick={() => setModalVideo(video)}
                   >
                     Xem lại
                   </button>
@@ -207,8 +406,70 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {selected && (
-        <VideoModal video={selected} onClose={() => setSelected(null)} />
+      {showBulkBar && selectedIds.length > 0 && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#2A1A00",
+            borderRadius: 30,
+            padding: "12px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.35)",
+            zIndex: 100,
+            fontFamily: "Georgia, serif",
+          }}
+        >
+          <span style={{ color: "#fff", fontSize: 13, fontWeight: 600 }}>
+            ✓ Đã chọn {selectedIds.length} video
+          </span>
+          <button
+            type="button"
+            onClick={deleteBulk}
+            disabled={bulkDeleting}
+            style={{
+              background: "#E84040",
+              color: "#fff",
+              border: "none",
+              borderRadius: 20,
+              padding: "7px 18px",
+              fontSize: 13,
+              fontFamily: "Georgia, serif",
+              fontWeight: 700,
+              cursor: bulkDeleting ? "wait" : "pointer",
+              opacity: bulkDeleting ? 0.7 : 1,
+            }}
+          >
+            {bulkDeleting ? "⏳ Đang xóa..." : `🗑 Xóa ${selectedIds.length} video`}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedIds([]);
+              setShowBulkBar(false);
+            }}
+            style={{
+              background: "rgba(255,255,255,0.1)",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: 20,
+              padding: "7px 14px",
+              fontSize: 13,
+              fontFamily: "Georgia, serif",
+              cursor: "pointer",
+            }}
+          >
+            Bỏ chọn
+          </button>
+        </div>
+      )}
+
+      {modalVideo && (
+        <VideoModal video={modalVideo} onClose={() => setModalVideo(null)} />
       )}
     </main>
   );

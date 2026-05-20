@@ -1,51 +1,31 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import AnimationCanvas, {
-  type AnimationCanvasHandle,
-} from "@/components/AnimationCanvas";
-import AnimationOptionsPanel, {
-  defaultAnimationOptions,
-} from "@/components/AnimationOptions";
-import ExportButton from "@/components/ExportButton";
+import DurationSelector from "@/components/DurationSelector";
 import UploadZone, { type UploadedImage } from "@/components/UploadZone";
-import type { AnimationConfig, AnimationOptions, Video } from "@/types/animation";
-
-function mergeConfig(
-  config: AnimationConfig,
-  options: AnimationOptions,
-): AnimationConfig {
-  return {
-    ...config,
-    ...options,
-    kidCount: options.kidCount,
-  };
-}
+import VideoGenerator from "@/components/VideoGenerator";
+import QuoteCalculator from "@/components/QuoteCalculator";
+import type { AnimationConfig } from "@/types/animation";
+import { DEFAULT_ANIMATION_OPTIONS } from "@/types/animation";
 
 export default function Home() {
-  const canvasRef = useRef<AnimationCanvasHandle>(null);
   const imagesRef = useRef<UploadedImage[]>([]);
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number | null>(null);
-  const [isProcessingAll, setIsProcessingAll] = useState(false);
-  const [batchProgress, setBatchProgress] = useState<string | null>(null);
-  const [options, setOptions] = useState<AnimationOptions>(defaultAnimationOptions);
   const [error, setError] = useState<string | null>(null);
-  const [exportSuccess, setExportSuccess] = useState<Video | null>(null);
+  const [aiVideoUrl, setAiVideoUrl] = useState<string | null>(null);
+  const [videoDuration, setVideoDuration] = useState(6);
+  const [hasAudio, setHasAudio] = useState(false);
 
-  const isBusy =
-    isProcessingAll ||
-    images.some((im) => im.status === "processing");
+  const isAnalyzing = images.some((im) => im.status === "processing");
 
-  const displayConfig = useMemo(() => {
-    if (currentIndex === null) return null;
-    const img = images[currentIndex];
-    if (!img?.config) return null;
-    return mergeConfig(img.config, options);
-  }, [currentIndex, images, options]);
+  const currentImage =
+    currentIndex !== null ? images[currentIndex] : undefined;
 
-  const pendingCount = images.filter((im) => im.status === "pending").length;
+  const animationConfig = useMemo(() => {
+    if (!currentImage?.config) return null;
+    return currentImage.config;
+  }, [currentImage?.config]);
 
   useEffect(() => {
     imagesRef.current = images;
@@ -85,8 +65,7 @@ export default function Home() {
               : im,
           ),
         );
-      } catch (err) {
-        console.error("Sprite processing failed:", err);
+      } catch {
         setImages((prev) =>
           prev.map((im) =>
             im.id === id
@@ -113,7 +92,7 @@ export default function Home() {
         }
         return next;
       });
-      setExportSuccess(null);
+      setAiVideoUrl(null);
       setError(null);
 
       for (const item of items) {
@@ -136,34 +115,40 @@ export default function Home() {
       });
       return next;
     });
-    setExportSuccess(null);
+    setAiVideoUrl(null);
   }, []);
 
   const handleSelect = useCallback((index: number) => {
     setCurrentIndex(index);
-    setExportSuccess(null);
+    setAiVideoUrl(null);
     setError(null);
   }, []);
-
-  const currentImage =
-    currentIndex !== null ? images[currentIndex] : undefined;
 
   const processImage = useCallback(
     async (img: UploadedImage, index: number) => {
       setImages((prev) =>
         prev.map((im, i) =>
-          i === index ? { ...im, status: "processing" as const, errorMsg: undefined } : im,
+          i === index
+            ? { ...im, status: "processing" as const, errorMsg: undefined }
+            : im,
         ),
       );
 
       try {
+        const analyzeOptions = {
+          ...DEFAULT_ANIMATION_OPTIONS,
+          kidCount: 1 as const,
+          duration:
+            videoDuration <= 6 ? 10 : videoDuration <= 8 ? 8 : 15,
+        };
+
         const res = await fetch("/api/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             imageBase64: img.base64,
             mimeType: img.mimeType,
-            options,
+            options: analyzeOptions,
           }),
         });
 
@@ -184,8 +169,7 @@ export default function Home() {
         setError(null);
         return config;
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Lỗi xử lý";
+        const message = err instanceof Error ? err.message : "Lỗi xử lý";
         setImages((prev) =>
           prev.map((im, i) =>
             i === index
@@ -196,7 +180,7 @@ export default function Home() {
         throw err;
       }
     },
-    [options],
+    [videoDuration],
   );
 
   const processCurrent = async () => {
@@ -206,57 +190,15 @@ export default function Home() {
     }
 
     const img = images[currentIndex];
-    if (!img) return;
-
-    if (img.status === "processing") return;
+    if (!img || img.status === "processing") return;
 
     setError(null);
-    setExportSuccess(null);
+    setAiVideoUrl(null);
 
     try {
       await processImage(img, currentIndex);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Phân tích ảnh thất bại");
-    }
-  };
-
-  const processAll = async () => {
-    const pendingIndices = imagesRef.current
-      .map((im, i) => (im.status === "pending" ? i : -1))
-      .filter((i) => i >= 0);
-
-    if (!pendingIndices.length) {
-      setError("Không còn ảnh nào chờ xử lý");
-      return;
-    }
-
-    setIsProcessingAll(true);
-    setError(null);
-    setExportSuccess(null);
-
-    try {
-      for (let step = 0; step < pendingIndices.length; step++) {
-        const index = pendingIndices[step];
-        setBatchProgress(
-          `Đang xử lý ${step + 1}/${pendingIndices.length}...`,
-        );
-
-        const snapshot = imagesRef.current[index];
-        if (!snapshot || snapshot.status !== "pending") continue;
-
-        try {
-          await processImage(snapshot, index);
-        } catch {
-          /* per-image error state already set */
-        }
-
-        if (step < pendingIndices.length - 1) {
-          await new Promise((r) => setTimeout(r, 500));
-        }
-      }
-    } finally {
-      setIsProcessingAll(false);
-      setBatchProgress(null);
     }
   };
 
@@ -269,157 +211,122 @@ export default function Home() {
           onSelect={handleSelect}
           onRemove={handleRemove}
           onAdd={handleAddImages}
-          disabled={isBusy}
+          disabled={isAnalyzing}
         />
 
-        {currentImage && (
-          <div className="kiddo-card flex flex-col gap-2 p-3">
-            <p className="text-xs font-bold text-gray-600">Nhân vật (sprite)</p>
-            {currentImage.spriteStatus === "processing" && (
-              <p className="flex items-center gap-2 text-sm font-medium text-[#F4750A]">
-                <span
-                  className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[#F4750A] border-t-transparent"
-                  aria-hidden
-                />
-                ✂️ Đang tách nhân vật...
-              </p>
-            )}
-            {(currentImage.spriteStatus === "done" ||
-              currentImage.spriteStatus === "fallback") &&
-              currentImage.spriteBase64 && (
-                <div className="flex items-center gap-3">
-                  <div
-                    className="h-20 w-20 shrink-0 overflow-hidden rounded-lg"
-                    style={{
-                      backgroundImage:
-                        "linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%)",
-                      backgroundSize: "12px 12px",
-                      backgroundPosition: "0 0, 0 6px, 6px -6px, -6px 0px",
-                    }}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={`data:${currentImage.spriteMime ?? "image/png"};base64,${currentImage.spriteBase64}`}
-                      alt="Sprite preview"
-                      className="h-full w-full object-contain"
-                    />
-                  </div>
-                  <p className="text-xs text-gray-600">
-                    {currentImage.spriteStatus === "fallback"
-                      ? "⚠️ Dùng ảnh gốc (chưa có Remove.bg key)"
-                      : "✅ Đã tách background thành công!"}
-                  </p>
-                </div>
-              )}
-          </div>
-        )}
+        <DurationSelector
+          value={videoDuration}
+          onChange={setVideoDuration}
+          hasAudio={hasAudio}
+          onAudioChange={setHasAudio}
+        />
 
-        <AnimationOptionsPanel
-          value={options}
-          onChange={setOptions}
-          disabled={isBusy}
+        <QuoteCalculator
+          selectedDuration={videoDuration}
+          hasAudio={hasAudio}
+          onDurationChange={setVideoDuration}
         />
 
         {images.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              className="btn-kiddo"
-              onClick={processCurrent}
-              disabled={
-                isBusy ||
-                currentIndex === null ||
-                images[currentIndex]?.status === "processing"
-              }
-            >
-              ✨ Tạo animation này
-            </button>
-            <button
-              type="button"
-              className="btn-kiddo"
-              onClick={processAll}
-              disabled={isBusy || pendingCount === 0}
-            >
-              🚀 Tạo tất cả ({pendingCount} ảnh)
-            </button>
-            {batchProgress && (
-              <p className="text-center text-sm font-medium text-[#F4750A]">
-                {batchProgress}
-              </p>
-            )}
-          </div>
+          <button
+            type="button"
+            className="btn-kiddo"
+            onClick={processCurrent}
+            disabled={
+              isAnalyzing ||
+              currentIndex === null ||
+              images[currentIndex]?.status === "processing"
+            }
+          >
+            ✨ Phân tích ảnh & tạo prompt
+          </button>
         )}
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col items-center gap-6">
+      <div className="flex min-w-0 flex-1 flex-col items-center gap-4">
         {error && (
           <p className="text-center text-sm text-red-600" role="alert">
             {error}
           </p>
         )}
 
-        {currentIndex !== null && images[currentIndex]?.status === "done" && displayConfig && (
-          <div className="flex w-full flex-col items-center gap-4">
-            <div className="kiddo-card w-full max-w-[640px] text-center">
-              <p className="text-xs text-gray-500">
-                Ảnh {currentIndex + 1}/{images.length}
-              </p>
-              <h2 className="text-lg font-bold text-[#F4750A]">
-                {displayConfig.title}
-              </h2>
-              <p className="text-sm text-gray-600">{displayConfig.subtitle}</p>
-            </div>
+        {images.length === 0 && (
+          <p className="kiddo-card max-w-md text-center text-sm text-gray-500">
+            Tải flashcard bên trái để bắt đầu
+          </p>
+        )}
 
-            <AnimationCanvas
-              ref={canvasRef}
-              config={displayConfig}
-              spriteBase64={currentImage?.spriteBase64}
-              spriteMime={currentImage?.spriteMime ?? "image/png"}
-            />
-
-            <ExportButton
-              canvasRef={canvasRef}
-              config={displayConfig}
-              onExportComplete={(data) => {
-                setExportSuccess(data);
-              }}
-            />
-
-            {exportSuccess && (
-              <div className="kiddo-card w-full max-w-[640px] text-center text-sm">
-                <p className="font-bold text-[#F4750A]">Đã lưu video!</p>
-                <p className="mt-1 text-gray-600">
-                  <Link
-                    href="/history"
-                    className="underline hover:text-[#F4750A]"
-                  >
-                    Xem trong Lịch sử
-                  </Link>
-                </p>
-              </div>
-            )}
-          </div>
+        {currentIndex !== null && images[currentIndex]?.status === "processing" && (
+          <p className="kiddo-card w-full max-w-[640px] text-center text-sm text-[#F4750A]">
+            Đang phân tích ảnh {currentIndex + 1}…
+          </p>
         )}
 
         {currentIndex !== null &&
           images[currentIndex]?.status === "pending" &&
-          !displayConfig && (
-            <p className="kiddo-card text-center text-sm text-gray-600">
-              Ảnh {currentIndex + 1} đang chờ — bấm{" "}
-              <strong className="text-[#F4750A]">✨ Tạo animation này</strong>{" "}
-              hoặc <strong className="text-[#F4750A]">🚀 Tạo tất cả</strong>
+          !animationConfig && (
+            <p className="kiddo-card w-full max-w-[640px] text-center text-sm text-gray-600">
+              Ảnh {currentIndex + 1} đã sẵn sàng — bấm{" "}
+              <strong className="text-[#F4750A]">
+                ✨ Phân tích ảnh & tạo prompt
+              </strong>{" "}
+              bên trái
             </p>
           )}
 
-        {currentIndex !== null && images[currentIndex]?.status === "processing" && (
-          <p className="kiddo-card text-center text-sm text-[#F4750A]">
-            Đang tạo animation cho ảnh {currentIndex + 1}…
-          </p>
-        )}
+        {currentIndex !== null &&
+          images[currentIndex]?.status === "done" &&
+          animationConfig &&
+          currentImage && (
+            <div className="flex w-full max-w-[640px] flex-col gap-4">
+              <div className="kiddo-card overflow-hidden p-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={currentImage.previewUrl}
+                  alt={animationConfig.title}
+                  className="aspect-video w-full object-contain bg-orange-50"
+                />
+                <div className="border-t border-orange-100 px-4 py-3 text-center">
+                  <p className="text-xs text-gray-500">
+                    Ảnh {currentIndex + 1}/{images.length}
+                  </p>
+                  <h2 className="text-lg font-bold text-[#F4750A]">
+                    {animationConfig.title}
+                  </h2>
+                  {animationConfig.subtitle && (
+                    <p className="text-sm text-gray-600">
+                      {animationConfig.subtitle}
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-[#2a8a2a]">
+                    ✅ Đã phân tích — tạo video AI bên dưới
+                  </p>
+                </div>
+              </div>
 
-        {images.length === 0 && (
-          <p className="kiddo-card max-w-md text-center text-sm text-gray-500">
-            Thêm flashcard bên trái để bắt đầu
+              <VideoGenerator
+                imageBase64={currentImage.base64}
+                mimeType={currentImage.mimeType}
+                animationConfig={animationConfig}
+                duration={videoDuration}
+                hasAudio={hasAudio}
+                onVideoReady={(url) => setAiVideoUrl(url)}
+                onExportComplete={(video) =>
+                  console.log("Saved:", video.id)
+                }
+              />
+
+              {aiVideoUrl && (
+                <p className="text-center text-xs text-gray-500">
+                  Video AI đã sẵn sàng ở trên — xem và tải xuống
+                </p>
+              )}
+            </div>
+          )}
+
+        {currentIndex !== null && images[currentIndex]?.status === "error" && (
+          <p className="kiddo-card w-full max-w-[640px] text-center text-sm text-red-600">
+            {images[currentIndex]?.errorMsg ?? "Phân tích thất bại"}
           </p>
         )}
       </div>

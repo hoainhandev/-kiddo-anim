@@ -40,6 +40,7 @@ export default function KiddoHeader() {
   const pathname = usePathname();
   const isHome = pathname === "/";
   const isHistory = pathname === "/history";
+  const isCosts = pathname === "/costs";
 
   return (
     <header className="w-full border-b-4 border-[#F4750A] bg-gradient-to-b from-[#FFF8F0] to-white px-4 py-4 shadow-sm">
@@ -84,6 +85,16 @@ export default function KiddoHeader() {
             }`}
           >
             Lịch sử
+          </Link>
+          <Link
+            href="/costs"
+            className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+              isCosts
+                ? "bg-[#F4750A] text-white hover:bg-[#e06800]"
+                : "border-2 border-[#F4750A] text-[#F4750A] hover:bg-orange-50"
+            }`}
+          >
+            Chi phí
           </Link>
         </nav>
       </div>
