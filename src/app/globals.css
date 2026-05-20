@@ -3,6 +3,8 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --kiddo-orange: #f4750a;
+  --kiddo-yellow: #ffd700;
 }
 
 @theme inline {
@@ -12,15 +14,44 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
+  background: linear-gradient(180deg, #eaf6ff 0%, #fff8f0 50%, #ffffff 100%);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+}
+
+.kiddo-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid rgba(244, 117, 10, 0.2);
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(244, 117, 10, 0.12);
+  backdrop-filter: blur(8px);
+  padding: 20px;
+}
+
+.btn-kiddo {
+  background: linear-gradient(135deg, #f4750a, #e85d00);
+  color: white;
+  border: none;
+  border-radius: 40px;
+  padding: 12px 24px;
+  font-family: Georgia, serif;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 18px rgba(244, 117, 10, 0.35);
+  width: 100%;
+}
+
+.btn-kiddo:hover:not(:disabled) {
+  opacity: 0.88;
+  transform: translateY(-2px);
+}
+
+.btn-kiddo:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
 }
