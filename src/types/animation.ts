@@ -1,5 +1,40 @@
 export type ShapeType = "circle" | "square" | "triangle" | "star";
 
+export type AnimationBackground =
+  | "sky"
+  | "space"
+  | "ocean"
+  | "farm"
+  | "classroom";
+
+export type AnimationSpeed = "slow" | "normal" | "fast";
+
+export type AnimationTextSize = "small" | "medium" | "large";
+
+export type AnimationCharacterStyle = "happy" | "excited" | "calm";
+
+export interface AnimationOptions {
+  kidCount: 1 | 2 | 3;
+  background: AnimationBackground;
+  speed: AnimationSpeed;
+  hasConfetti: boolean;
+  hasParticles: boolean;
+  characterStyle: AnimationCharacterStyle;
+  textSize: AnimationTextSize;
+  duration: 8 | 10 | 15;
+}
+
+export const DEFAULT_ANIMATION_OPTIONS: AnimationOptions = {
+  kidCount: 3,
+  background: "sky",
+  speed: "normal",
+  duration: 10,
+  hasConfetti: true,
+  hasParticles: true,
+  textSize: "medium",
+  characterStyle: "happy",
+};
+
 export interface KidConfig {
   bodyColor: string;
   hairColor: string;
@@ -42,6 +77,14 @@ export interface AnimationConfig {
   theme?: string;
   kidCount?: number;
   mood?: string;
+  /** Scene & export options (from UI + merged from analyze API) */
+  background?: AnimationBackground;
+  speed?: AnimationSpeed;
+  hasConfetti?: boolean;
+  hasParticles?: boolean;
+  characterStyle?: AnimationCharacterStyle;
+  textSize?: AnimationTextSize;
+  duration?: 8 | 10 | 15;
 }
 
 export interface Video {

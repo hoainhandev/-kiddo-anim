@@ -9,19 +9,19 @@ import {
   useState,
 } from "react";
 import {
-  DUR,
   FPS,
   H,
   W,
+  getDurationMs,
+  getTotalFrames,
   initRenderState,
   renderFrame,
   type RenderState,
 } from "@/lib/animationEngine";
 import type { AnimationConfig } from "@/types/animation";
 
-const TOTAL_FRAMES = Math.round((DUR / 1000) * FPS);
-const FRAME_MS = 1000 / FPS;
 const THUMBNAIL_MS = 500;
+const FRAME_MS = 1000 / FPS;
 
 export interface AnimationCanvasHandle {
   captureFrame: () => Promise<Blob>;
@@ -62,6 +62,9 @@ const AnimationCanvas = forwardRef<AnimationCanvasHandle, AnimationCanvasProps>(
 
     const [playing, setPlaying] = useState(true);
     const [progress, setProgress] = useState(0);
+
+    const dur = getDurationMs(config);
+    const totalFrames = getTotalFrames(config);
 
     const resetState = useCallback(() => {
       stateRef.current = initRenderState(config);
@@ -107,11 +110,11 @@ const AnimationCanvas = forwardRef<AnimationCanvasHandle, AnimationCanvasProps>(
           const state = initRenderState(config);
           const blobs: Blob[] = [];
 
-          for (let i = 0; i < TOTAL_FRAMES; i++) {
+          for (let i = 0; i < totalFrames; i++) {
             const t = i * FRAME_MS;
             drawAtTime(t, state);
             blobs.push(await canvasToBlob(canvas));
-            onProgress?.((i + 1) / TOTAL_FRAMES);
+            onProgress?.((i + 1) / totalFrames);
           }
 
           exportingRef.current = false;
@@ -124,7 +127,7 @@ const AnimationCanvas = forwardRef<AnimationCanvasHandle, AnimationCanvasProps>(
           return blobs;
         },
       }),
-      [config, drawAtTime],
+      [config, drawAtTime, totalFrames],
     );
 
     useEffect(() => {
@@ -151,12 +154,12 @@ const AnimationCanvas = forwardRef<AnimationCanvasHandle, AnimationCanvasProps>(
         if (!exportingRef.current) {
           if (playingRef.current) {
             const elapsed = now - startRef.current;
-            const t = Math.min(elapsed, DUR);
+            const t = Math.min(elapsed, dur);
             pausedAtRef.current = t;
             drawAtTime(t, stateRef.current);
-            setProgress(t / DUR);
+            setProgress(t / dur);
 
-            if (t >= DUR) {
+            if (t >= dur) {
               playingRef.current = false;
               setPlaying(false);
             }
@@ -173,17 +176,17 @@ const AnimationCanvas = forwardRef<AnimationCanvasHandle, AnimationCanvasProps>(
 
       rafId = requestAnimationFrame(loop);
       return () => cancelAnimationFrame(rafId);
-    }, [config, drawAtTime, onReady]);
+    }, [config, drawAtTime, dur, onReady]);
 
     const handlePlayPause = () => {
       if (playing) {
         pausedAtRef.current = Math.min(
           performance.now() - startRef.current,
-          DUR,
+          dur,
         );
         setPlaying(false);
       } else {
-        if (pausedAtRef.current >= DUR) {
+        if (pausedAtRef.current >= dur) {
           handleRestart();
           return;
         }

@@ -8,13 +8,35 @@ import type {
 
 export const W = 640;
 export const H = 420;
-export const DUR = 10000;
-export const FPS = 25;
 
 export const PRIMARY = "#F4750A";
 export const YELLOW = "#FFD700";
 export const SKY_TOP = "#87CEEB";
 export const SKY_BOTTOM = "#EAF6FF";
+
+/** Default clip length (ms); prefer `getDurationMs(cfg)` for real exports. */
+export const DUR = 10000;
+export const FPS = 25;
+
+export function getDurationMs(cfg: Pick<AnimationConfig, "duration">): number {
+  const d = cfg.duration;
+  if (d === 8 || d === 10 || d === 15) return d * 1000;
+  return 10_000;
+}
+
+export function getSpeedMult(cfg: Pick<AnimationConfig, "speed">): number {
+  if (cfg.speed === "slow") return 0.7;
+  if (cfg.speed === "fast") return 1.4;
+  return 1;
+}
+
+export function animT(t: number, cfg: AnimationConfig): number {
+  return t * getSpeedMult(cfg);
+}
+
+export function getTotalFrames(cfg: AnimationConfig): number {
+  return Math.round((getDurationMs(cfg) / 1000) * FPS);
+}
 
 let frameTime = 0;
 
@@ -74,10 +96,11 @@ function cfgShapes(cfg: AnimationConfig): ShapeType[] {
 function normalizeLyrics(cfg: AnimationConfig): LyricLine[] {
   if (!cfg.lyrics?.length) return [];
 
+  const dur = getDurationMs(cfg);
   const first = cfg.lyrics[0];
   if (typeof first === "string") {
     const lines = cfg.lyrics as string[];
-    const span = DUR / lines.length;
+    const span = dur / lines.length;
     return lines.map((text, i) => ({
       text,
       startMs: i * span,
@@ -95,10 +118,12 @@ function shapeTargets(cfg: AnimationConfig): CircleConfig[] {
     cfg.colors?.secondary ?? YELLOW,
     cfg.colors?.accent ?? "#4A90D9",
   ];
+  const dur = getDurationMs(cfg);
+  const scale = dur / 10_000;
   const slots = [
-    { x: 0.22, y: 0.42, timeMs: 2800 },
-    { x: 0.5, y: 0.38, timeMs: 4800 },
-    { x: 0.78, y: 0.42, timeMs: 6800 },
+    { x: 0.22, y: 0.42, timeMs: Math.round(2800 * scale) },
+    { x: 0.5, y: 0.38, timeMs: Math.round(4800 * scale) },
+    { x: 0.78, y: 0.42, timeMs: Math.round(6800 * scale) },
   ];
 
   return shapes.map((shape, i) => ({
@@ -112,7 +137,8 @@ function shapeTargets(cfg: AnimationConfig): CircleConfig[] {
 }
 
 function kidCount(cfg: AnimationConfig): number {
-  return Math.max(1, cfg.kidCount ?? cfg.kids?.length ?? 3);
+  const n = cfg.kidCount ?? cfg.kids?.length ?? 3;
+  return Math.min(3, Math.max(1, Math.round(n)));
 }
 
 function kidAt(cfg: AnimationConfig, idx: number): KidConfig {
@@ -127,14 +153,13 @@ function easeOut(t: number): number {
   return 1 - (1 - t) ** 3;
 }
 
-// ─── Background ───────────────────────────────────────────────────────────────
+// ─── Background themes ───────────────────────────────────────────────────────
 
-export function drawBg(
+function drawSkyBg(
   t: number,
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  _cfg: AnimationConfig,
 ): void {
   const grad = ctx.createLinearGradient(0, 0, 0, height * 0.78);
   grad.addColorStop(0, SKY_TOP);
@@ -213,6 +238,208 @@ export function drawBg(
   for (const f of flowerSpots) {
     const bob = Math.sin(t / 500 + f.x) * 2;
     drawFlower(ctx, f.x, grassTop + 8 + bob, f.c);
+  }
+}
+
+function drawSpaceBg(
+  t: number,
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void {
+  const g = ctx.createLinearGradient(0, 0, 0, height);
+  g.addColorStop(0, "#0a0a2a");
+  g.addColorStop(1, "#0a0a1a");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+
+  for (let i = 0; i < 80; i++) {
+    const x = (i * 73 + t * 0.02) % width;
+    const y = (i * 47) % (height * 0.75);
+    const tw = 1 + (i % 3);
+    ctx.fillStyle = `rgba(255,255,255,${0.3 + (i % 5) * 0.12})`;
+    ctx.fillRect(x, y, tw, tw);
+  }
+
+  const moonX = width - 80;
+  const moonY = 70;
+  ctx.fillStyle = "#E8E8E8";
+  ctx.beginPath();
+  ctx.arc(moonX, moonY, 32, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#0a0a1a";
+  ctx.beginPath();
+  ctx.arc(moonX - 14, moonY - 6, 28, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#C94C4C";
+  ctx.beginPath();
+  ctx.arc(120 + Math.sin(t / 2000) * 8, 100, 12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#6B8CFF";
+  ctx.beginPath();
+  ctx.arc(480 + Math.cos(t / 1800) * 10, 160, 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  const groundY = height * 0.78;
+  ctx.fillStyle = "#151520";
+  ctx.fillRect(0, groundY, width, height - groundY);
+}
+
+function drawOceanBg(
+  t: number,
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void {
+  const g = ctx.createLinearGradient(0, 0, 0, height);
+  g.addColorStop(0, "#00CED1");
+  g.addColorStop(0.45, "#006994");
+  g.addColorStop(1, "#003d5c");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = "rgba(255,255,255,0.25)";
+  ctx.lineWidth = 2;
+  for (let w = 0; w < 4; w++) {
+    ctx.beginPath();
+    const y = height * 0.35 + w * 40 + Math.sin(t / 600 + w) * 6;
+    for (let x = 0; x <= width; x += 20) {
+      ctx.lineTo(x, y + Math.sin(x / 40 + t / 300 + w) * 8);
+    }
+    ctx.stroke();
+  }
+
+  for (let i = 0; i < 6; i++) {
+    const fx = 80 + i * 100 + Math.sin(t / 500 + i) * 20;
+    const fy = height * 0.42 + Math.cos(t / 400 + i) * 15;
+    ctx.fillStyle = "#FF9F43";
+    ctx.beginPath();
+    ctx.ellipse(fx, fy, 18, 10, Math.sin(t / 800 + i), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(fx + 6, fy - 2, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  for (let b = 0; b < 25; b++) {
+    const bx = (b * 97 + t * 0.08) % width;
+    const by = height * 0.2 + (b * 53) % (height * 0.5);
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(bx, by, 3 + (b % 4), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  const sandY = height * 0.72;
+  ctx.fillStyle = "#C2B280";
+  ctx.fillRect(0, sandY, width, height - sandY);
+}
+
+function drawFarmBg(
+  t: number,
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void {
+  const sky = ctx.createLinearGradient(0, 0, 0, height * 0.55);
+  sky.addColorStop(0, "#87CEEB");
+  sky.addColorStop(1, "#E0F4FF");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, width, height * 0.55);
+
+  const sunX = width - 70;
+  const sunY = 65;
+  ctx.fillStyle = YELLOW;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, 26 + Math.sin(t / 700) * 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#5CB338";
+  ctx.beginPath();
+  ctx.moveTo(0, height * 0.52);
+  ctx.quadraticCurveTo(width * 0.25, height * 0.38, width * 0.5, height * 0.5);
+  ctx.quadraticCurveTo(width * 0.75, height * 0.62, width, height * 0.48);
+  ctx.lineTo(width, height * 0.72);
+  ctx.lineTo(0, height * 0.72);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#8B6914";
+  ctx.fillRect(0, height * 0.72, width, height * 0.28);
+
+  ctx.fillStyle = "#B22222";
+  ctx.fillRect(width * 0.62, height * 0.38, 70, 55);
+  ctx.fillStyle = "#8B4513";
+  ctx.beginPath();
+  ctx.moveTo(width * 0.62 - 15, height * 0.38);
+  ctx.lineTo(width * 0.62 + 35, height * 0.28);
+  ctx.lineTo(width * 0.62 + 85, height * 0.38);
+  ctx.closePath();
+  ctx.fill();
+
+  for (let i = 0; i < 5; i++) {
+    drawFlower(
+      ctx,
+      60 + i * 130,
+      height * 0.76 + Math.sin(t / 400 + i) * 2,
+      ["#FF6B9D", YELLOW, "#DA70D6"][i % 3],
+    );
+  }
+}
+
+function drawClassroomBg(
+  t: number,
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void {
+  ctx.fillStyle = "#f5f0e8";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = "#2d4a3e";
+  ctx.fillRect(24, 20, width - 48, height * 0.42);
+  ctx.strokeStyle = "#8B7355";
+  ctx.lineWidth = 6;
+  ctx.strokeRect(24, 20, width - 48, height * 0.42);
+
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.font = 'bold 18px "Comic Sans MS", sans-serif';
+  ctx.fillText("A B C   1 + 1 = 2", 40, 55 + Math.sin(t / 900) * 2);
+
+  ctx.fillStyle = "#c4a574";
+  ctx.fillRect(0, height * 0.68, width, height * 0.32);
+  ctx.fillStyle = "#8B6914";
+  for (let d = 0; d < 4; d++) {
+    ctx.fillRect(80 + d * 140, height * 0.62, 90, 8);
+  }
+}
+
+export function drawBg(
+  t: number,
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  cfg: AnimationConfig,
+): void {
+  const theme = cfg.background ?? "sky";
+  switch (theme) {
+    case "space":
+      drawSpaceBg(t, ctx, width, height);
+      break;
+    case "ocean":
+      drawOceanBg(t, ctx, width, height);
+      break;
+    case "farm":
+      drawFarmBg(t, ctx, width, height);
+      break;
+    case "classroom":
+      drawClassroomBg(t, ctx, width, height);
+      break;
+    default:
+      drawSkyBg(t, ctx, width, height);
   }
 
   ctx.strokeStyle = PRIMARY;
@@ -438,7 +665,11 @@ export function drawKid(
 ): void {
   const kid = kidAt(cfg, kidIdx);
   const wave = pose.wave ?? false;
-  const waveAngle = wave ? Math.sin(frameTime / 120 + kidIdx) * 0.45 - 0.3 : 0;
+  const mood = cfg.characterStyle ?? "happy";
+  const waveSpeed = mood === "excited" ? 80 : mood === "calm" ? 165 : 120;
+  const waveAngle = wave
+    ? Math.sin(frameTime / waveSpeed + kidIdx) * 0.45 - 0.3
+    : 0;
 
   ctx.save();
   ctx.translate(cx, cy);
@@ -514,7 +745,9 @@ export function drawKid(
   ctx.lineWidth = 2;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.arc(0, -10, 8, 0.15 * Math.PI, 0.85 * Math.PI);
+  const sm0 = mood === "excited" ? 0.08 * Math.PI : mood === "calm" ? 0.22 * Math.PI : 0.15 * Math.PI;
+  const sm1 = mood === "excited" ? 0.92 * Math.PI : mood === "calm" ? 0.78 * Math.PI : 0.85 * Math.PI;
+  ctx.arc(0, -10, 8, sm0, sm1);
   ctx.stroke();
 
   ctx.restore();
@@ -669,6 +902,41 @@ export function updateParticles(
 
 // ─── Lyrics ───────────────────────────────────────────────────────────────────
 
+function lyricFontSize(cfg: AnimationConfig): number {
+  if (cfg.textSize === "small") return 18;
+  if (cfg.textSize === "large") return 30;
+  return 23;
+}
+
+function drawConfetti(
+  t: number,
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  cfg: AnimationConfig,
+): void {
+  if (cfg.hasConfetti === false) return;
+  const dur = getDurationMs(cfg);
+  if (t < dur * 0.82) return;
+
+  const u = (t - dur * 0.82) / (dur * 0.18);
+  const colors = ["#F4750A", "#FFD700", "#FF69B4", "#4ECDC4", "#9B59B6"];
+  for (let i = 0; i < 48; i++) {
+    const x =
+      (Math.sin(i * 12.989 + u * 14) * 0.5 + 0.5) * (width - 20) + 10;
+    const y =
+      ((i * 37 + u * 260 + t * 0.05) % (height + 40)) - 20 + u * 30;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(u * Math.PI * 2 + i * 0.4);
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.globalAlpha = 0.75;
+    ctx.fillRect(-3, -7, 6, 14);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
 export function drawLyric(
   t: number,
   ctx: CanvasRenderingContext2D,
@@ -689,11 +957,11 @@ export function drawLyric(
   ctx.save();
   ctx.globalAlpha = alpha;
 
-  const fontSize = 18;
+  const fontSize = lyricFontSize(cfg);
   ctx.font = `bold ${fontSize}px "Comic Sans MS", "Chalkboard SE", cursive, sans-serif`;
   const textW = ctx.measureText(line.text).width;
   const pillW = textW + 40;
-  const pillH = 36;
+  const pillH = Math.round(fontSize + 16);
   const px = (width - pillW) / 2;
   const py = height * 0.58;
 
@@ -720,15 +988,22 @@ export function getKidPositions(t: number, cfg: AnimationConfig): KidState[] {
   const grassY = H * 0.82;
   const spacing = W / (count + 1);
   const states: KidState[] = [];
+  const at = animT(t, cfg);
+  const style = cfg.characterStyle ?? "happy";
+  const bounceAmp = style === "excited" ? 7 : style === "calm" ? 3 : 5;
 
   for (let i = 0; i < count; i++) {
     const cx = spacing * (i + 1);
-    const bounce = Math.sin(t / 280 + i * 1.2) * 5;
+    const bounce = Math.sin(at / 280 + i * 1.2) * bounceAmp;
     const cy = grassY - 8 + bounce;
     const sc = count === 1 ? 1.15 : count === 2 ? 1 : 0.92;
 
+    const dur = getDurationMs(cfg);
+    const waveStart = dur * 0.18;
+    const waveSpan = dur * 0.07;
+    const waveEnd = dur * 0.32;
     const waveWindow =
-      (t >= 1800 + i * 700 && t < 3200 + i * 700) ||
+      (t >= waveStart + i * waveSpan && t < waveEnd + i * waveSpan) ||
       shapeTargets(cfg).some(
         (c) =>
           t >= c.timeMs &&
@@ -783,8 +1058,10 @@ export function renderFrame(
   cfg: AnimationConfig,
   state: RenderState,
 ): void {
-  frameTime = t;
-  drawBg(t, ctx, width, height, cfg);
+  const dur = getDurationMs(cfg);
+  const a = animT(t, cfg);
+  frameTime = a;
+  drawBg(a, ctx, width, height, cfg);
 
   shapeTargets(cfg).forEach((circleCfg, i) => {
     const cs = state.circleStates[i];
@@ -803,7 +1080,9 @@ export function renderFrame(
       !state.hitFired[i] &&
       t >= circleCfg.timeMs + 800
     ) {
-      spawnBurst(cs.cx, cs.cy, cs.color, state.particles);
+      if (cfg.hasParticles !== false) {
+        spawnBurst(cs.cx, cs.cy, cs.color, state.particles);
+      }
       state.hitFired[i] = true;
       cs.active = false;
     }
@@ -821,11 +1100,18 @@ export function renderFrame(
     drawKid(k.cx, k.cy, k.sc, k.kidIdx, k.pose, cfg, ctx);
   }
 
-  updateParticles(state.particles, ctx);
+  if (cfg.hasParticles !== false) {
+    updateParticles(state.particles, ctx);
+  } else {
+    state.particles.length = 0;
+  }
 
   drawLyric(t, ctx, width, height, cfg);
 
-  if (t < 2500) {
-    drawTitle(t, ctx, width, height, cfg);
+  drawConfetti(t, ctx, width, height, cfg);
+
+  const titleWindow = Math.min(2500, dur * 0.25);
+  if (t < titleWindow) {
+    drawTitle(a, ctx, width, height, cfg);
   }
 }
